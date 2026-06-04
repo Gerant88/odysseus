@@ -1203,6 +1203,111 @@ def setup_skills_routes(skills_manager: SkillsManager) -> APIRouter:
             save_settings(settings)
         return {"ok": True, "name": name, "is_overridden": False}
 
+    @router.post("/import-github")
+    async def import_github_skill(request: Request):
+        """Fetch a SKILL.md from a GitHub repo URL and save it as a skill."""
+        import re
+        import httpx
+
+        body = await request.json()
+        url = (body.get("url") or "").strip()
+        if not url:
+            raise HTTPException(status_code=400, detail="url is required")
+
+        # Parse owner/repo from various GitHub URL forms:
+        #   https://github.com/owner/repo
+        #   https://github.com/owner/repo/tree/branch/skills/foo
+        m = re.match(r"https?://github\.com/([^/]+/[^/]+?)(?:/|$)", url)
+        if not m:
+            raise HTTPException(status_code=400, detail="Not a valid GitHub repo URL")
+        owner_repo = m.group(1)
+
+        # Candidate SKILL.md locations to try (in order)
+        candidates = [
+            "SKILL.md",
+            "skills/caveman/SKILL.md",
+        ]
+        # If the URL contains a skills/<name> path, try that first
+        path_m = re.search(r"/(?:skills)/([^/]+)", url)
+        if path_m:
+            skill_subdir = path_m.group(1)
+            candidates.insert(0, f"skills/{skill_subdir}/SKILL.md")
+
+        raw_base = f"https://raw.githubusercontent.com/{owner_repo}/main"
+        raw_base_master = f"https://raw.githubusercontent.com/{owner_repo}/master"
+
+        skill_text = None
+        async with httpx.AsyncClient(timeout=10) as client:
+            for candidate in candidates:
+                for base in [raw_base, raw_base_master]:
+                    try:
+                        r = await client.get(f"{base}/{candidate}")
+                        if r.status_code == 200:
+                            skill_text = r.text
+                            break
+                    except Exception:
+                        continue
+                if skill_text:
+                    break
+
+        if not skill_text:
+            raise HTTPException(
+                status_code=404,
+                detail="Could not find a SKILL.md in this repo. Tried: " + ", ".join(candidates),
+            )
+
+        try:
+            from services.memory.skill_format import Skill
+            import yaml
+
+            # The hand-rolled frontmatter parser doesn't handle YAML block
+            # scalars (e.g. `description: >` multiline). Pre-parse the
+            # frontmatter with PyYAML and rewrite it as a flat one-liner so
+            # from_markdown gets a clean value.
+            if skill_text.startswith("---"):
+                end = skill_text.find("\n---", 3)
+                if end > 0:
+                    fm_raw = skill_text[3:end]
+                    body_raw = skill_text[end + 4:]
+                    try:
+                        fm_parsed = yaml.safe_load(fm_raw) or {}
+                        # Rebuild frontmatter with scalar values on one line
+                        flat_lines = []
+                        for k, v in fm_parsed.items():
+                            if isinstance(v, list):
+                                flat_lines.append(f"{k}: [{', '.join(str(i) for i in v)}]")
+                            elif isinstance(v, str) and ("\n" in v or v.strip() == ">"):
+                                # Collapse multiline to single quoted line
+                                collapsed = " ".join(v.split())
+                                flat_lines.append(f'{k}: "{collapsed}"')
+                            else:
+                                flat_lines.append(f"{k}: {v}")
+                        skill_text = "---\n" + "\n".join(flat_lines) + "\n---" + body_raw
+                    except Exception:
+                        pass  # fall through to from_markdown as-is
+
+            sk = Skill.from_markdown(skill_text)
+        except Exception as e:
+            raise HTTPException(status_code=422, detail=f"Failed to parse SKILL.md: {e}")
+
+        user = _owner(request)
+        entry = skills_manager.add_skill(
+            name=sk.name,
+            description=sk.description,
+            category=sk.category or "general",
+            tags=sk.tags,
+            when_to_use=sk.when_to_use,
+            procedure=sk.procedure,
+            pitfalls=sk.pitfalls,
+            verification=sk.verification,
+            status="draft",
+            source="user",
+            owner=user,
+        )
+        if not entry.get("_deduped"):
+            _fire_skill_added(user)
+        return {"ok": True, "deduped": bool(entry.get("_deduped")), "skill": entry}
+
     @router.post("/add")
     async def add_skill(request: Request, body: SkillAddRequest):
         user = _owner(request)

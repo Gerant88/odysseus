@@ -1865,8 +1865,34 @@ async function addSkill() {
   }
 }
 
+async function importGithubSkill() {
+  const urlInput = document.getElementById('import-skill-url');
+  const url = urlInput?.value.trim();
+  if (!url) { uiModule.showError('Paste a GitHub repo URL first'); return; }
+  const btn = document.getElementById('import-skill-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
+  try {
+    const res = await fetch(`${API}/api/skills/import-github`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ url }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    if (urlInput) urlInput.value = '';
+    await loadSkills();
+    uiModule.showToast(data.deduped ? 'Skill already exists' : `Skill "${data.skill?.name}" imported (draft)`);
+  } catch (err) {
+    uiModule.showError('Import failed: ' + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Import from GitHub'; }
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('add-skill-btn')?.addEventListener('click', addSkill);
+  document.getElementById('import-skill-btn')?.addEventListener('click', importGithubSkill);
   document.getElementById('skills-search')?.addEventListener('input', renderSkillsList);
   document.getElementById('skills-sort')?.addEventListener('change', (e) => {
     // Dropdown holds two optgroups: Sort (sort:<key>) and Filter (filter:<key>).

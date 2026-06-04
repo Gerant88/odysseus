@@ -313,7 +313,12 @@
             <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:2px;">
               <h2 style="margin:0;padding:0;line-height:1;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Add Skill</h2>
             </div>
-            <p class="memory-desc doclib-desc" style="margin-top:6px;">Create a skill by hand — title, what it solves, and an approach.</p>
+            <p class="memory-desc doclib-desc" style="margin-top:6px;">Create a skill by hand — or paste a GitHub repo URL to import one automatically.</p>
+            <div style="display:flex;gap:6px;margin-top:4px;margin-bottom:10px;align-items:center;">
+              <input type="text" id="import-skill-url" class="memory-add-input" placeholder="https://github.com/owner/repo" style="flex:1;margin:0;" aria-label="GitHub repo URL" />
+              <button id="import-skill-btn" class="memory-toolbar-btn" style="white-space:nowrap;">Import from GitHub</button>
+            </div>
+            <div style="border-top:1px solid rgba(255,255,255,0.07);margin-bottom:10px;"></div>
             <div class="skill-ph-wrap" style="margin-top:4px;margin-bottom:6px;">
               <input type="text" id="new-skill-title" placeholder=" " class="memory-add-input skill-hint-input" aria-label="Skill title" />
               <span class="skill-rich-ph"><span class="k">Title</span> — short name, e.g. “build-vllm-wheel”</span>
