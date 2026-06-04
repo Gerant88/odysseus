@@ -1205,108 +1205,263 @@ def setup_skills_routes(skills_manager: SkillsManager) -> APIRouter:
 
     @router.post("/import-github")
     async def import_github_skill(request: Request):
-        """Fetch a SKILL.md from a GitHub repo URL and save it as a skill."""
+        """Import a skill from a GitHub repo URL.
+
+        Strategy (in order):
+        1. If URL points to a specific skills/<name> subfolder, fetch that SKILL.md.
+        2. Try SKILL.md at the repo root.
+        3. Discover all skills/<name>/SKILL.md entries in the repo and import them all.
+        4. Fall back: fetch the README and use the active LLM to synthesise a SKILL.md.
+        """
         import re
         import httpx
+        import yaml
 
         body = await request.json()
         url = (body.get("url") or "").strip()
         if not url:
             raise HTTPException(status_code=400, detail="url is required")
 
-        # Parse owner/repo from various GitHub URL forms:
-        #   https://github.com/owner/repo
-        #   https://github.com/owner/repo/tree/branch/skills/foo
         m = re.match(r"https?://github\.com/([^/]+/[^/]+?)(?:/|$)", url)
         if not m:
             raise HTTPException(status_code=400, detail="Not a valid GitHub repo URL")
         owner_repo = m.group(1)
 
-        # Candidate SKILL.md locations to try (in order)
-        candidates = [
-            "SKILL.md",
-            "skills/caveman/SKILL.md",
-        ]
-        # If the URL contains a skills/<name> path, try that first
-        path_m = re.search(r"/(?:skills)/([^/]+)", url)
-        if path_m:
-            skill_subdir = path_m.group(1)
-            candidates.insert(0, f"skills/{skill_subdir}/SKILL.md")
+        def raw_url(path, branch="main"):
+            return f"https://raw.githubusercontent.com/{owner_repo}/{branch}/{path}"
 
-        raw_base = f"https://raw.githubusercontent.com/{owner_repo}/main"
-        raw_base_master = f"https://raw.githubusercontent.com/{owner_repo}/master"
+        def api_url(path=""):
+            return f"https://api.github.com/repos/{owner_repo}/contents/{path}"
 
-        skill_text = None
-        async with httpx.AsyncClient(timeout=10) as client:
-            for candidate in candidates:
-                for base in [raw_base, raw_base_master]:
+        async def fetch_text(path):
+            """Try main then master branch; return text or None."""
+            async with httpx.AsyncClient(timeout=10) as client:
+                for branch in ("main", "master"):
                     try:
-                        r = await client.get(f"{base}/{candidate}")
+                        r = await client.get(raw_url(path, branch))
                         if r.status_code == 200:
-                            skill_text = r.text
-                            break
+                            return r.text
                     except Exception:
                         continue
-                if skill_text:
-                    break
+            return None
 
-        if not skill_text:
-            raise HTTPException(
-                status_code=404,
-                detail="Could not find a SKILL.md in this repo. Tried: " + ", ".join(candidates),
+        async def list_github_dir(path):
+            """Return list of item dicts from GitHub contents API, or []."""
+            async with httpx.AsyncClient(timeout=10, headers={"Accept": "application/vnd.github+json"}) as client:
+                try:
+                    r = await client.get(api_url(path))
+                    if r.status_code == 200:
+                        return r.json() if isinstance(r.json(), list) else []
+                except Exception:
+                    pass
+            return []
+
+        def normalise_skill_md(text):
+            """Rewrite YAML block scalars to flat one-liners so from_markdown handles them."""
+            if not text.startswith("---"):
+                return text
+            end = text.find("\n---", 3)
+            if end < 0:
+                return text
+            fm_raw, body_raw = text[3:end], text[end + 4:]
+            try:
+                fm_parsed = yaml.safe_load(fm_raw) or {}
+                flat = []
+                for k, v in fm_parsed.items():
+                    if isinstance(v, list):
+                        flat.append(f"{k}: [{', '.join(str(i) for i in v)}]")
+                    elif isinstance(v, str) and ("\n" in v or v.strip() in (">", "|")):
+                        flat.append(f'{k}: "{" ".join(v.split())}"')
+                    else:
+                        flat.append(f"{k}: {v}")
+                return "---\n" + "\n".join(flat) + "\n---" + body_raw
+            except Exception:
+                return text
+
+        def save_skill(sk, user):
+            from services.memory.skill_format import Skill as _Skill
+            entry = skills_manager.add_skill(
+                name=sk.name,
+                description=sk.description,
+                category=sk.category or "general",
+                tags=sk.tags,
+                when_to_use=sk.when_to_use,
+                procedure=sk.procedure,
+                pitfalls=sk.pitfalls,
+                verification=sk.verification,
+                status="draft",
+                source="user",
+                owner=user,
             )
-
-        try:
-            from services.memory.skill_format import Skill
-            import yaml
-
-            # The hand-rolled frontmatter parser doesn't handle YAML block
-            # scalars (e.g. `description: >` multiline). Pre-parse the
-            # frontmatter with PyYAML and rewrite it as a flat one-liner so
-            # from_markdown gets a clean value.
-            if skill_text.startswith("---"):
-                end = skill_text.find("\n---", 3)
-                if end > 0:
-                    fm_raw = skill_text[3:end]
-                    body_raw = skill_text[end + 4:]
-                    try:
-                        fm_parsed = yaml.safe_load(fm_raw) or {}
-                        # Rebuild frontmatter with scalar values on one line
-                        flat_lines = []
-                        for k, v in fm_parsed.items():
-                            if isinstance(v, list):
-                                flat_lines.append(f"{k}: [{', '.join(str(i) for i in v)}]")
-                            elif isinstance(v, str) and ("\n" in v or v.strip() == ">"):
-                                # Collapse multiline to single quoted line
-                                collapsed = " ".join(v.split())
-                                flat_lines.append(f'{k}: "{collapsed}"')
-                            else:
-                                flat_lines.append(f"{k}: {v}")
-                        skill_text = "---\n" + "\n".join(flat_lines) + "\n---" + body_raw
-                    except Exception:
-                        pass  # fall through to from_markdown as-is
-
-            sk = Skill.from_markdown(skill_text)
-        except Exception as e:
-            raise HTTPException(status_code=422, detail=f"Failed to parse SKILL.md: {e}")
+            return entry
 
         user = _owner(request)
-        entry = skills_manager.add_skill(
-            name=sk.name,
-            description=sk.description,
-            category=sk.category or "general",
-            tags=sk.tags,
-            when_to_use=sk.when_to_use,
-            procedure=sk.procedure,
-            pitfalls=sk.pitfalls,
-            verification=sk.verification,
-            status="draft",
-            source="user",
-            owner=user,
-        )
+        from services.memory.skill_format import Skill
+
+        # ── 1. Specific skills/<name> subfolder in the URL ────────────────────
+        path_m = re.search(r"/skills/([^/]+)(?:/|$)", url)
+        if path_m:
+            skill_path = f"skills/{path_m.group(1)}/SKILL.md"
+            text = await fetch_text(skill_path)
+            if text:
+                sk = Skill.from_markdown(normalise_skill_md(text))
+                entry = save_skill(sk, user)
+                if not entry.get("_deduped"):
+                    _fire_skill_added(user)
+                return {"ok": True, "deduped": bool(entry.get("_deduped")),
+                        "skill": entry, "source": "skill_md"}
+
+        # ── 2. Root SKILL.md ──────────────────────────────────────────────────
+        text = await fetch_text("SKILL.md")
+        if text:
+            sk = Skill.from_markdown(normalise_skill_md(text))
+            entry = save_skill(sk, user)
+            if not entry.get("_deduped"):
+                _fire_skill_added(user)
+            return {"ok": True, "deduped": bool(entry.get("_deduped")),
+                    "skill": entry, "source": "skill_md"}
+
+        # ── 3. Discover skills/ directory and import all SKILL.md entries ─────
+        skills_dir = await list_github_dir("skills")
+        if skills_dir:
+            imported = []
+            for item in skills_dir:
+                if item.get("type") != "dir":
+                    continue
+                subdir_name = item.get("name", "")
+                text = await fetch_text(f"skills/{subdir_name}/SKILL.md")
+                if not text:
+                    continue
+                try:
+                    sk = Skill.from_markdown(normalise_skill_md(text))
+                    entry = save_skill(sk, user)
+                    if not entry.get("_deduped"):
+                        _fire_skill_added(user)
+                    imported.append(entry)
+                except Exception as e:
+                    logger.warning(f"import-github: failed to parse skills/{subdir_name}/SKILL.md: {e}")
+            if imported:
+                return {"ok": True, "count": len(imported), "skills": imported,
+                        "source": "skills_dir"}
+
+        # ── 4. No SKILL.md anywhere — ask the active LLM to synthesise one ────
+        readme_text = None
+        for readme_path in ("README.md", "readme.md", "README.rst", "README"):
+            readme_text = await fetch_text(readme_path)
+            if readme_text:
+                break
+
+        if not readme_text:
+            raise HTTPException(
+                status_code=404,
+                detail="No SKILL.md found and no README to read. Cannot import this repo."
+            )
+
+        # Resolve the user's active model — prefer most-recently-used chat session
+        # model over the "default" endpoint, since users often have a content-safety
+        # or embedding model set as default that can't do synthesis.
+        try:
+            from src.endpoint_resolver import resolve_endpoint
+            from src.llm_core import llm_call_async
+            from core.database import SessionLocal, Session as DBSession
+
+            ep_url, ep_model, ep_headers = resolve_endpoint("default", owner=user)
+
+            # If default looks like a non-generative model, swap the model name
+            # from the user's most recent chat session (keep URL+headers from
+            # resolve_endpoint so the API key is still present).
+            _non_generative_hints = ("safety", "embedding", "moderation", "classify")
+            if not ep_model or any(h in (ep_model or "").lower() for h in _non_generative_hints):
+                try:
+                    _db = SessionLocal()
+                    _sessions = _db.query(DBSession).filter(
+                        DBSession.owner == user
+                    ).order_by(DBSession.last_accessed.desc()).limit(5).all()
+                    _db.close()
+                    for _s in _sessions:
+                        if _s.model and not any(h in _s.model.lower() for h in _non_generative_hints):
+                            ep_model = _s.model
+                            break
+                except Exception:
+                    pass
+
+            if not ep_url or not ep_model:
+                raise ValueError("no model configured")
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail="No model configured. Set a Default model in Settings, then retry."
+            )
+
+        repo_name = owner_repo.split("/")[-1]
+        # Truncate README to avoid blowing context on giant docs
+        readme_truncated = readme_text[:6000] + ("\n\n[...truncated...]" if len(readme_text) > 6000 else "")
+
+        synthesis_prompt = f"""You are converting a GitHub repository README into a reusable AI skill entry.
+
+Repository: {owner_repo}
+README:
+{readme_truncated}
+
+Produce a single SKILL.md file with YAML frontmatter and a markdown body. Use this exact structure:
+
+---
+name: <short-slug, kebab-case, no spaces>
+description: <one sentence, what the skill does>
+category: general
+tags: [tag1, tag2]
+when_to_use: <paragraph describing exactly when an AI agent should invoke this skill>
+status: draft
+---
+
+## Procedure
+
+1. <step one>
+2. <step two>
+...
+
+## Pitfalls
+
+- <common mistake or gotcha>
+
+## Verification
+
+- <how to confirm it worked>
+
+Rules:
+- Extract the actual procedure/steps from the README. Do not invent steps.
+- when_to_use must be specific enough to trigger on the right user requests.
+- If the repo is a collection of multiple tools, pick the primary one.
+- Output ONLY the SKILL.md content. No explanation, no code fences."""
+
+        try:
+            raw = await llm_call_async(
+                ep_url, ep_model,
+                [{"role": "user", "content": synthesis_prompt}],
+                max_tokens=1500,
+                headers=ep_headers,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"LLM call failed: {e}")
+
+        # Strip accidental code fences the model may add
+        raw = re.sub(r"^```[a-z]*\n?", "", raw.strip(), flags=re.MULTILINE)
+        raw = re.sub(r"\n?```$", "", raw.strip(), flags=re.MULTILINE)
+
+        if not raw.startswith("---"):
+            raise HTTPException(status_code=422,
+                detail="Model did not return a valid SKILL.md. Try again or create the skill manually.")
+
+        try:
+            sk = Skill.from_markdown(normalise_skill_md(raw))
+        except Exception as e:
+            raise HTTPException(status_code=422, detail=f"Failed to parse synthesised SKILL.md: {e}")
+
+        entry = save_skill(sk, user)
         if not entry.get("_deduped"):
             _fire_skill_added(user)
-        return {"ok": True, "deduped": bool(entry.get("_deduped")), "skill": entry}
+        return {"ok": True, "deduped": bool(entry.get("_deduped")),
+                "skill": entry, "source": "llm_synthesis"}
 
     @router.post("/add")
     async def add_skill(request: Request, body: SkillAddRequest):

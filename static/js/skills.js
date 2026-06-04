@@ -1882,7 +1882,17 @@ async function importGithubSkill() {
     if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
     if (urlInput) urlInput.value = '';
     await loadSkills();
-    uiModule.showToast(data.deduped ? 'Skill already exists' : `Skill "${data.skill?.name}" imported (draft)`);
+    let msg;
+    if (data.count > 1) {
+      msg = `${data.count} skills imported (draft)`;
+    } else if (data.deduped) {
+      msg = 'Skill already exists';
+    } else if (data.source === 'llm_synthesis') {
+      msg = `Skill "${data.skill?.name}" synthesised from README (draft)`;
+    } else {
+      msg = `Skill "${data.skill?.name}" imported (draft)`;
+    }
+    uiModule.showToast(msg);
   } catch (err) {
     uiModule.showError('Import failed: ' + err.message);
   } finally {
