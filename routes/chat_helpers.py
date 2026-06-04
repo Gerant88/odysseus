@@ -448,6 +448,7 @@ async def build_chat_context(
     webhook_manager=None,
     use_enhanced_message: bool = False,
     agent_mode: bool = False,
+    caveman_mode: bool = False,
 ) -> ChatContext:
     """Build the full context (preface + messages) for an LLM call.
 
@@ -512,6 +513,7 @@ async def build_chat_context(
         agent_mode=agent_mode,
         incognito=incognito,
         use_skills=skills_enabled,
+        caveman_mode=caveman_mode,
     )
     if use_rag is not None:
         _preface_kwargs["use_rag"] = use_rag_val

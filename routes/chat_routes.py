@@ -389,6 +389,7 @@ def setup_chat_routes(
         preset_id = form_data.get("preset_id")
         allow_bash = form_data.get("allow_bash")
         allow_web_search = form_data.get("allow_web_search")
+        caveman_mode = str(form_data.get("caveman_mode", "")).lower() == "true"
         use_rag = form_data.get("use_rag")
         search_context = form_data.get("search_context")  # pre-fetched web search results (compare mode)
         compare_mode = str(form_data.get("compare_mode", "")).lower() == "true"
@@ -508,6 +509,7 @@ def setup_chat_routes(
             # manage_skills (agent mode). In plain chat or incognito the
             # index would be useless / unwanted noise.
             agent_mode=(chat_mode == "agent"),
+            caveman_mode=caveman_mode,
         )
 
         _research_flags = {"do": do_research}  # Mutable container for generator scope

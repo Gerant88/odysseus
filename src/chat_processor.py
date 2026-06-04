@@ -156,6 +156,18 @@ class ChatProcessor:
         scored.sort(key=lambda x: x[0], reverse=True)
         return [mem for _, mem in scored[:k]]
 
+    CAVEMAN_SYSTEM_PROMPT = (
+        "Respond terse like smart caveman. All technical substance stay. Only fluff die.\n\n"
+        "ACTIVE EVERY RESPONSE. No revert. Off only if user says \"stop caveman\" or \"normal mode\".\n\n"
+        "Rules: Drop articles (a/an/the), filler (just/really/basically/actually/simply), "
+        "pleasantries (sure/certainly/of course/happy to), hedging. Fragments OK. "
+        "Short synonyms (big not extensive, fix not \"implement a solution for\"). "
+        "Technical terms exact. Code blocks unchanged. Errors quoted exact.\n\n"
+        "Pattern: [thing] [action] [reason]. [next step].\n\n"
+        "Not: \"Sure! I'd be happy to help you with that.\"\n"
+        "Yes: \"Bug in auth middleware. Token expiry check wrong. Fix:\""
+    )
+
     def build_context_preface(
         self,
         message: str,
@@ -170,6 +182,7 @@ class ChatProcessor:
         agent_mode: bool = False,
         incognito: bool = False,
         use_skills: bool = True,
+        caveman_mode: bool = False,
     ) -> Tuple[List[Dict[str, str]], List[Dict[str, Any]], List[Dict[str, str]]]:
         """Build the context preface for LLM calls.
 
@@ -184,6 +197,13 @@ class ChatProcessor:
             preface.append({
                 "role": "system",
                 "content": preset_system_prompt
+            })
+
+        # Caveman mode: inject compressed-response system prompt
+        if caveman_mode:
+            preface.append({
+                "role": "system",
+                "content": self.CAVEMAN_SYSTEM_PROMPT,
             })
         if not agent_mode:
             try:

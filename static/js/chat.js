@@ -773,6 +773,9 @@ import createResearchSynapse from './researchSynapse.js';
       if (el('bash-toggle').checked) {
         fd.append('allow_bash', 'true');
       }
+      if (el('caveman-toggle').checked) {
+        fd.append('caveman_mode', 'true');
+      }
       const ragChk = el('rag-toggle');
       if (ragChk && !ragChk.checked) {
         fd.append('use_rag', 'false');

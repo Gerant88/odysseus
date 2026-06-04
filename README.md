@@ -22,6 +22,7 @@ A self-hosted AI workspace -- meant to be the self-hosted version of the UI expe
   - **Notes & Tasks** -- Quick notes with reminders, a todo list, and scheduled tasks the agent can act on.<br>　<sub>note pings · checklist · cron-style tasks · ntfy / browser / email channels</sub>
   - **Calendar** -- Local-first calendar with CalDAV sync to Radicale / Nextcloud / Apple / Fastmail.<br>　<sub>CalDAV pull · .ics import/export · per-calendar colors · agent-aware</sub>
   - **Works on mobile** -- looks and runs great on your phone, not just desktop.<br>　<sub>responsive · installable (PWA) · touch gestures</sub>
+  - **Caveman Mode** -- one-click token saver. AI responds in compressed caveman-style prose, ~65–75% fewer output tokens, full technical accuracy kept.<br>　<sub>rock icon in chat toolbar · per-session toggle · inspired by [caveman](https://github.com/JuliusBrussee/caveman)</sub>
   - **Extras** -- more to explore, happy if you give it a go!<br>　<sub>image editor · theme editor · file uploads (vision + PDF) · web search · presets · sessions · 2FA</sub>
 
 ## Demo

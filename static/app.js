@@ -1574,6 +1574,7 @@ function initializeEventListeners() {
   const TOOL_TOGGLE_TOAST_LABELS = {
     web: 'Web search',
     bash: 'Shell',
+    caveman: 'Caveman mode',
   };
 
   function showToolToggleToast(stateKey, active) {
@@ -1633,6 +1634,7 @@ function initializeEventListeners() {
     bash: { role: 'Shell Access', text: 'Gives the AI access to a sandboxed shell for running commands, installing packages, and executing scripts. Use with caution.' },
     builder: { role: 'Tool Builder', text: 'Create custom mini-apps and tools the AI can use. Describe what you need and the AI will build a tool you can reuse across conversations.' },
     research: { role: 'Deep Research', text: 'Multi-round web search with source analysis. Takes longer but produces comprehensive, well-sourced answers. Your next message will trigger a deep research cycle.' },
+    caveman: { role: 'Caveman Mode', text: 'AI respond in compressed caveman-style prose. Cut ~65-75% output tokens. Full technical accuracy stay. Code blocks unchanged. Toggle off: normal mode return.' },
   };
   function _showToolSplash(key) {
     const splash = _toolSplashes[key];
@@ -1687,6 +1689,7 @@ function initializeEventListeners() {
   }
   setupToggle('web-toggle-btn', 'web-toggle', 'web');
   setupToggle('bash-toggle-btn', 'bash-toggle', 'bash');
+  setupToggle('caveman-toggle-btn', 'caveman-toggle', 'caveman');
 
   // Document editor toggle (special: uses module panel, not a checkbox)
   const overflowDocBtn = el('overflow-doc-btn');
@@ -1966,7 +1969,7 @@ function initializeEventListeners() {
     if (!inputLeft || !overflowMenu || !overflowWrapper) return;
 
     // Buttons that can be collapsed (in reverse priority — last collapsed first)
-    const collapsibleIds = ['bash-toggle-btn', 'web-toggle-btn'];
+    const collapsibleIds = ['bash-toggle-btn', 'web-toggle-btn', 'caveman-toggle-btn'];
     const collapsibleBtns = collapsibleIds.map(id => el(id)).filter(Boolean);
     // Map of toolbar btn id → overflow mirror element (created dynamically)
     const overflowMirrors = new Map();
@@ -2303,7 +2306,7 @@ function initializeEventListeners() {
         // ephemeral — their agent-mode defaults must come back on toggle-off.
         const _offIds = ['web-toggle', 'bash-toggle', 'research-toggle'];
         _offIds.forEach(id => { const c = el(id); if (c) c.checked = false; });
-        ['web-toggle-btn', 'bash-toggle-btn'].forEach(id => { const b = el(id); if (b) b.classList.remove('active'); });
+        ['web-toggle-btn', 'bash-toggle-btn', 'caveman-toggle-btn'].forEach(id => { const b = el(id); if (b) b.classList.remove('active'); });
         const _ab = el('mode-agent-btn'), _cb = el('mode-chat-btn');
         if (_ab) _ab.classList.remove('active');
         if (_cb) _cb.classList.add('active');
