@@ -6,6 +6,18 @@
 ───────────────────────────────────────────────
 ```
 
+> **This is a personal fork** of [pewdiepie-archdaemon/odysseus](https://github.com/pewdiepie-archdaemon/odysseus).
+> See [CHANGELOG.md](CHANGELOG.md) for a full list of changes made in this fork.
+
+### Fork Differences
+
+| Feature | Description |
+|---|---|
+| **Caveman Mode** | Chat toolbar toggle (boulder icon) that compresses AI responses ~65–75% fewer tokens. Inspired by [JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman). |
+| **GitHub Skill Import** | Paste a GitHub repo URL in Brain → Add Skill to import skills automatically. Supports `SKILL.md` files, bulk `skills/` directory discovery, and LLM-synthesised skills from README. |
+
+---
+
 ![Odysseus](docs/odysseus.jpg)
 
 A self-hosted AI workspace -- meant to be the self-hosted version of the UI experience you get from ChatGPT and Claude. But with more jank and fun. Running on your own hardware, with your own data -- local-first, privacy-first, and no trojan.
