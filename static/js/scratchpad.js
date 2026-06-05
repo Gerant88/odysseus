@@ -369,8 +369,8 @@ function _cardHTML(e) {
 
   let statusEl = '';
   if (e.status === 'triaging' || e.status === 'creating') {
-    const label = e.status === 'triaging' ? 'Triaging' : 'Creating';
-    statusEl = `<span data-spinner-id="${e.id}" data-spinner-label="${label}" style="display:inline-flex;align-items:center;gap:6px;opacity:0.75;font-size:0.82em;font-family:monospace;"></span>`;
+    const label = e.error_msg || (e.status === 'triaging' ? 'Triaging' : 'Creating');
+    statusEl = `<span data-spinner-id="${e.id}" data-spinner-label="${_esc(label)}" style="display:inline-flex;align-items:center;gap:6px;opacity:0.75;font-size:0.82em;font-family:monospace;"></span>`;
   } else if (e.status === 'done') {
     statusEl = `<span style="opacity:0.5;font-size:0.8em;">✓ ${catLabel}</span>`;
     fuseEl = `

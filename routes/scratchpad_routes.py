@@ -165,22 +165,36 @@ async def _run_pipeline(entry_id: str, text: str, owner: str, session_manager, t
             "Be decisive. If ambiguous, prefer the simpler category (task over project)."
         )
 
-        try:
-            raw = await llm_call_async(
-                ep_url, ep_model,
-                [{"role": "system", "content": triage_system},
-                 {"role": "user", "content": text}],
-                max_tokens=512,
-                headers=ep_headers,
-            )
-        except Exception as e:
-            _update_entry(db, entry_id, status="error", error_msg=f"Triage LLM failed: {e}")
-            return
+        import asyncio as _asyncio
+        MAX_RETRIES = 2
+        triage = None
+        last_error = None
+        messages = [{"role": "system", "content": triage_system},
+                    {"role": "user", "content": text}]
 
-        triage = _parse_json_response(raw)
+        for attempt in range(1, MAX_RETRIES + 2):  # attempts: 1, 2, 3
+            try:
+                raw = await llm_call_async(
+                    ep_url, ep_model, messages,
+                    max_tokens=512, headers=ep_headers,
+                )
+                triage = _parse_json_response(raw)
+                if triage:
+                    break  # success
+                last_error = "Could not parse triage response."
+            except Exception as e:
+                last_error = str(e)
+
+            if attempt <= MAX_RETRIES:
+                retry_label = f"Retrying ({attempt}/{MAX_RETRIES})…"
+                logger.info(f"scratchpad triage attempt {attempt} failed: {last_error} — {retry_label}")
+                _update_entry(db, entry_id, status="triaging",
+                              error_msg=retry_label)
+                await _asyncio.sleep(2)  # brief pause before retry
+
         if not triage:
             _update_entry(db, entry_id, status="error",
-                          error_msg="Could not parse triage response. Try again.")
+                          error_msg=f"Failed after {MAX_RETRIES + 1} attempts. Last error: {last_error}")
             return
 
         category = triage.get("category", "note")
