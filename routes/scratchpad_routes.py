@@ -102,20 +102,49 @@ def _resolve_llm(owner: str):
 
 
 def _parse_json_response(raw: str) -> Optional[dict]:
-    """Strip fences and parse JSON; return None on failure."""
+    """Strip fences/think tags and parse the first complete JSON object."""
     raw = raw.strip()
-    raw = re.sub(r"^```[a-z]*\n?", "", raw, flags=re.MULTILINE)
-    raw = re.sub(r"\n?```$", "", raw, flags=re.MULTILINE)
-    # Some models wrap in <think>…</think> — strip
+    # Strip markdown fences
+    raw = re.sub(r"^```[a-zA-Z]*\n?", "", raw, flags=re.MULTILINE)
+    raw = re.sub(r"\n?```\s*$", "", raw, flags=re.MULTILINE)
+    # Strip <think>…</think> reasoning blocks (common in reasoning models)
     raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
-    # Find first { … } block
-    m = re.search(r"\{.*\}", raw, re.DOTALL)
-    if m:
-        raw = m.group(0)
-    try:
-        return json.loads(raw)
-    except Exception:
+
+    # Walk character-by-character to extract the first balanced { … } block.
+    # The greedy regex approach breaks when the model adds trailing commentary
+    # after the closing brace — this handles that correctly.
+    start = raw.find('{')
+    if start == -1:
+        logger.warning(f"scratchpad parse: no '{{' found in response (first 200): {raw[:200]!r}")
         return None
+    depth = 0
+    in_str = False
+    escape = False
+    for i, ch in enumerate(raw[start:], start):
+        if escape:
+            escape = False
+            continue
+        if ch == '\\' and in_str:
+            escape = True
+            continue
+        if ch == '"':
+            in_str = not in_str
+            continue
+        if in_str:
+            continue
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                candidate = raw[start:i + 1]
+                try:
+                    return json.loads(candidate)
+                except Exception as e:
+                    logger.warning(f"scratchpad parse: json.loads failed on candidate: {e} | {candidate[:200]!r}")
+                    return None
+    logger.warning(f"scratchpad parse: unbalanced braces in response (first 200): {raw[:200]!r}")
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -182,8 +211,10 @@ async def _run_pipeline(entry_id: str, text: str, owner: str, session_manager, t
                 if triage:
                     break  # success
                 last_error = "Could not parse triage response."
+                logger.warning(f"scratchpad triage attempt {attempt}: parse failed. Raw (300): {raw[:300]!r}")
             except Exception as e:
                 last_error = str(e)
+                logger.warning(f"scratchpad triage attempt {attempt}: LLM error: {e}")
 
             if attempt <= MAX_RETRIES:
                 retry_label = f"Retrying ({attempt}/{MAX_RETRIES})…"
