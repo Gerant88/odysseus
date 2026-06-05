@@ -9,6 +9,7 @@
  */
 
 import { makeWindowDraggable } from './windowDrag.js';
+import * as spinnerModule from './spinner.js';
 
 const API = window.location.origin;
 let _open = false;
@@ -158,8 +159,11 @@ async function _onSubmit() {
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
+    // Show the submitted text immediately with triaging status
+    data.raw_text = data.raw_text || text;
     _entries.unshift(data);
     _renderEntries();
+    _attachSpinners();
     _pollingIds.add(data.id);
     _maybeStartPolling();
   } catch (e) {
@@ -207,7 +211,7 @@ async function _pollInFlight() {
     } catch (_) { done.add(id); }
   }));
   done.forEach(id => _pollingIds.delete(id));
-  _renderEntries();
+  _renderEntries(); // _attachSpinners called inside _renderEntries
   _updateNotifDot();
   if (_pollingIds.size === 0) _stopPolling();
 }
@@ -248,6 +252,31 @@ function _renderEntries() {
   list.querySelectorAll('[data-openchat-id]').forEach(btn => {
     btn.addEventListener('click', () => _openChat(btn.dataset.openchatId));
   });
+  _attachSpinners();
+}
+
+// Attach the Odysseus wave spinner to any in-progress card status slots
+const _activeSpinners = new Map(); // entry_id → Spinner instance
+function _attachSpinners() {
+  const list = document.getElementById('scratchpad-entries-list');
+  if (!list) return;
+  list.querySelectorAll('[data-spinner-id]').forEach(slot => {
+    const id = slot.dataset.spinnerId;
+    if (_activeSpinners.has(id)) return; // already attached
+    const label = slot.dataset.spinnerLabel || 'Triaging';
+    const sp = spinnerModule.create(label, 'right', 'wave');
+    const el = sp.createElement();
+    sp.start();
+    slot.appendChild(el);
+    _activeSpinners.set(id, sp);
+  });
+  // Stop spinners for entries no longer in-flight
+  _activeSpinners.forEach((sp, id) => {
+    if (!list.querySelector(`[data-spinner-id="${id}"]`)) {
+      sp.stop?.();
+      _activeSpinners.delete(id);
+    }
+  });
 }
 
 function _cardHTML(e) {
@@ -257,8 +286,8 @@ function _cardHTML(e) {
 
   let statusEl = '';
   if (e.status === 'triaging' || e.status === 'creating') {
-    statusEl = `<span class="scratchpad-status-spinner" style="opacity:0.6;font-size:0.8em;">
-      ⟳ ${e.status === 'triaging' ? 'Triaging…' : 'Creating…'}</span>`;
+    const label = e.status === 'triaging' ? 'Triaging' : 'Creating';
+    statusEl = `<span data-spinner-id="${e.id}" data-spinner-label="${label}" style="display:inline-flex;align-items:center;gap:6px;opacity:0.75;font-size:0.82em;font-family:monospace;"></span>`;
   } else if (e.status === 'done') {
     statusEl = `<span style="opacity:0.5;font-size:0.8em;">✓ ${catLabel}</span>`;
   } else if (e.status === 'awaiting_approval') {
@@ -291,13 +320,9 @@ function _cardHTML(e) {
       </div>
     </div>` : '';
 
-  const spinnerAnim = e.status === 'triaging' || e.status === 'creating'
-    ? `<style>@keyframes sp-spin{to{transform:rotate(360deg)}}.scratchpad-status-spinner{display:inline-block;animation:sp-spin 1.2s linear infinite;}</style>`
-    : '';
-
   return `
     <div class="scratchpad-entry-card" style="padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.05);">
-      ${spinnerAnim}
+
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
         <div style="flex:1;min-width:0;">
           <div style="font-size:0.82em;opacity:0.45;margin-bottom:3px;">${ts}</div>
