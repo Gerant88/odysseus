@@ -17,6 +17,40 @@ let _entries = [];
 let _pollTimer = null;
 let _pollingIds = new Set();
 
+// Auto-delete fuse: tracks when each done entry first became done
+// Map<entry_id, { startedAt: timestamp, timerId: number }>
+const _fuseTimes = new Map();
+const FUSE_DURATION_MS = 60000;
+
+// Inject fuse CSS once
+(function _injectFuseStyles() {
+  if (document.getElementById('scratchpad-fuse-styles')) return;
+  const s = document.createElement('style');
+  s.id = 'scratchpad-fuse-styles';
+  s.textContent = `
+    .scratchpad-fuse-wrap {
+      display: flex; align-items: center; gap: 6px;
+      margin-top: 8px; height: 16px;
+    }
+    .scratchpad-fuse-track {
+      flex: 1; height: 2px; border-radius: 1px;
+      background: rgba(255,255,255,0.08); overflow: hidden; position: relative;
+    }
+    .scratchpad-fuse-fill {
+      position: absolute; left: 0; top: 0; height: 100%;
+      background: #e05c5c; border-radius: 1px;
+      animation: scratchpad-fuse-anim ${FUSE_DURATION_MS}ms linear forwards;
+    }
+    @keyframes scratchpad-fuse-anim { from { width: 0% } to { width: 100% } }
+    .scratchpad-fuse-icon {
+      flex-shrink: 0; opacity: 0.35; transition: opacity 0.2s;
+      color: #e05c5c;
+    }
+    .scratchpad-fuse-icon.fuse-near { opacity: 0.9; }
+  `;
+  document.head.appendChild(s);
+})();
+
 // ---------------------------------------------------------------------------
 // Panel lifecycle
 // ---------------------------------------------------------------------------
@@ -38,6 +72,9 @@ export function closePanel() {
   if (!_open) return;
   _open = false;
   _stopPolling();
+  // Pause fuse timers — they'll resume when panel reopens via _attachFuses
+  _fuseTimes.forEach(({ timerId }) => clearTimeout(timerId));
+  _fuseTimes.forEach((val, id) => _fuseTimes.set(id, { ...val, timerId: null }));
   const backdrop = document.getElementById('scratchpad-pane-backdrop');
   if (backdrop) {
     const pane = document.getElementById('scratchpad-pane');
@@ -254,6 +291,45 @@ function _renderEntries() {
     btn.addEventListener('click', () => _openChat(btn.dataset.openchatId));
   });
   _attachSpinners();
+  _attachFuses();
+}
+
+// ---------------------------------------------------------------------------
+// Auto-delete fuse
+// ---------------------------------------------------------------------------
+
+function _attachFuses() {
+  const list = document.getElementById('scratchpad-entries-list');
+  if (!list) return;
+
+  list.querySelectorAll('[data-fuse-id]').forEach(wrap => {
+    const id = wrap.dataset.fuseId;
+    if (!_fuseTimes.has(id)) {
+      // First time seeing this done entry — record start time and set timer
+      const startedAt = Date.now();
+      const timerId = setTimeout(() => { _fuseTimes.delete(id); _deleteEntry(id); }, FUSE_DURATION_MS);
+      _fuseTimes.set(id, { startedAt, timerId });
+    } else if (!_fuseTimes.get(id).timerId) {
+      // Panel was closed and reopened — resume with remaining time
+      const { startedAt } = _fuseTimes.get(id);
+      const remaining = FUSE_DURATION_MS - (Date.now() - startedAt);
+      if (remaining <= 0) { _fuseTimes.delete(id); _deleteEntry(id); return; }
+      const timerId = setTimeout(() => { _fuseTimes.delete(id); _deleteEntry(id); }, remaining);
+      _fuseTimes.set(id, { startedAt, timerId });
+    }
+
+    // Set animation-delay so re-renders continue the fuse from where it was
+    const { startedAt } = _fuseTimes.get(id);
+    const elapsed = Date.now() - startedAt;
+    const fill = wrap.querySelector('.scratchpad-fuse-fill');
+    if (fill) {
+      fill.style.animationDelay = `-${elapsed}ms`;
+      // Glow the trash icon when >80% through
+      const pct = elapsed / FUSE_DURATION_MS;
+      const icon = wrap.querySelector('.scratchpad-fuse-icon');
+      if (icon && pct >= 0.8) icon.classList.add('fuse-near');
+    }
+  });
 }
 
 // Attach the Odysseus wave spinner to any in-progress card status slots
@@ -282,6 +358,7 @@ function _attachSpinners() {
 
 function _cardHTML(e) {
   const catLabel = CATEGORY_LABELS[e.category] || e.category || '…';
+  let fuseEl = '';
   const preview = (e.raw_text || '').slice(0, 120) + (e.raw_text?.length > 120 ? '…' : '');
   const ts = e.created_at ? new Date(e.created_at).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
 
@@ -291,6 +368,20 @@ function _cardHTML(e) {
     statusEl = `<span data-spinner-id="${e.id}" data-spinner-label="${label}" style="display:inline-flex;align-items:center;gap:6px;opacity:0.75;font-size:0.82em;font-family:monospace;"></span>`;
   } else if (e.status === 'done') {
     statusEl = `<span style="opacity:0.5;font-size:0.8em;">✓ ${catLabel}</span>`;
+    fuseEl = `
+      <div class="scratchpad-fuse-wrap" data-fuse-id="${e.id}">
+        <div class="scratchpad-fuse-track">
+          <div class="scratchpad-fuse-fill"></div>
+        </div>
+        <div class="scratchpad-fuse-icon" title="Auto-deleting from Scratchpad in ~60s">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          </svg>
+        </div>
+      </div>`;
   } else if (e.status === 'awaiting_approval') {
     statusEl = `<span style="color:var(--accent,#e05c5c);font-size:0.8em;">● Proposal ready</span>`;
   } else if (e.status === 'approved') {
@@ -340,6 +431,7 @@ function _cardHTML(e) {
             <line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
+      ${fuseEl}
     </div>`;
 }
 
@@ -352,6 +444,11 @@ function _esc(str) {
 // ---------------------------------------------------------------------------
 
 async function _deleteEntry(id) {
+  // Cancel any running fuse timer for this entry
+  if (_fuseTimes.has(id)) {
+    clearTimeout(_fuseTimes.get(id).timerId);
+    _fuseTimes.delete(id);
+  }
   try {
     await fetch(`${API}/api/scratchpad/${id}`, { method: 'DELETE', credentials: 'same-origin' });
     _entries = _entries.filter(e => e.id !== id);
