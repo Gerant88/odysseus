@@ -375,7 +375,7 @@ async def _run_project_proposal(
         language="markdown",
         current_content=proposal_md,
         version_count=1,
-        is_active=False,
+        is_active=True,
         archived=False,
         created_at=now,
         updated_at=now,
