@@ -8,6 +8,8 @@
  *   hasPendingProposals()  true if any entry is awaiting_approval
  */
 
+import { makeWindowDraggable } from './windowDrag.js';
+
 const API = window.location.origin;
 let _open = false;
 let _entries = [];
@@ -73,10 +75,11 @@ function _buildPanel() {
         </svg>Scratchpad
       </h4>
       <span style="flex:1"></span>
-      <button id="scratchpad-minimize-btn" class="modal-minimize-btn" title="Close" aria-label="Close scratchpad">
+      <button id="scratchpad-close-btn" class="modal-minimize-btn" title="Close" aria-label="Close scratchpad">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="3.4" stroke-linecap="round" aria-hidden="true">
-          <line x1="6" y1="18" x2="18" y2="18"/>
+          stroke-width="2.8" stroke-linecap="round" aria-hidden="true">
+          <line x1="6" y1="6" x2="18" y2="18"/>
+          <line x1="18" y1="6" x2="6" y2="18"/>
         </svg>
       </button>
     </div>
@@ -89,8 +92,8 @@ function _buildPanel() {
                background:var(--input-bg,rgba(255,255,255,0.05));
                border:1px solid rgba(255,255,255,0.1);border-radius:6px;
                color:inherit;padding:8px 10px;outline:none;font-family:inherit;"></textarea>
-      <div style="display:flex;justify-content:flex-end;margin-top:6px;">
-        <button id="scratchpad-submit-btn" class="memory-toolbar-btn">Submit</button>
+      <div style="display:flex;justify-content:center;margin-top:8px;">
+        <button id="scratchpad-submit-btn" class="memory-toolbar-btn" style="padding:5px 24px;">Submit</button>
       </div>
     </div>
 
@@ -105,13 +108,20 @@ function _buildPanel() {
   backdrop.appendChild(pane);
   document.body.appendChild(backdrop);
 
-  document.getElementById('scratchpad-minimize-btn').addEventListener('click', closePanel);
+  document.getElementById('scratchpad-close-btn').addEventListener('click', closePanel);
   document.getElementById('scratchpad-submit-btn').addEventListener('click', _onSubmit);
   document.getElementById('scratchpad-textarea').addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
       _onSubmit();
     }
+  });
+
+  // Make the window draggable by its header (same pattern as Notes/Calendar)
+  makeWindowDraggable(pane, {
+    content: pane,
+    header: pane.querySelector('.notes-pane-header'),
+    skipSelector: 'button, input, select, textarea, label',
   });
 }
 
