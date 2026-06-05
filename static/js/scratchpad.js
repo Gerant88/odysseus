@@ -35,7 +35,12 @@ export function closePanel() {
   if (!_open) return;
   _open = false;
   _stopPolling();
-  document.getElementById('scratchpad-pane')?.remove();
+  const backdrop = document.getElementById('scratchpad-pane-backdrop');
+  if (backdrop) {
+    const pane = document.getElementById('scratchpad-pane');
+    if (pane) pane.classList.add('notes-pane-leaving');
+    setTimeout(() => backdrop.remove(), 180);
+  }
   document.getElementById('tool-scratchpad-btn')?.classList.remove('active');
 }
 
@@ -49,45 +54,58 @@ export function hasPendingProposals() {
 
 function _buildPanel() {
   if (document.getElementById('scratchpad-pane')) return;
+
+  // Pane — sized smaller than Notes since it's a quick-entry tool
   const pane = document.createElement('div');
   pane.id = 'scratchpad-pane';
-  pane.className = 'notes-pane scratchpad-pane';
+  pane.className = 'notes-pane';
+  pane.style.cssText = 'width:min(480px,92vw);height:auto;max-height:min(70vh,600px);';
   pane.innerHTML = `
-    <div class="notes-header">
-      <span class="notes-title" style="display:flex;align-items:center;gap:7px;">
+    <div class="notes-mobile-grabber" aria-hidden="true"></div>
+    <div class="notes-pane-header">
+      <h4 class="notes-pane-title">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+          style="vertical-align:-2.5px;margin-right:6px;">
           <rect x="3" y="3" width="18" height="18" rx="2"/>
           <line x1="3" y1="9" x2="21" y2="9"/>
           <line x1="9" y1="21" x2="9" y2="9"/>
+        </svg>Scratchpad
+      </h4>
+      <span style="flex:1"></span>
+      <button id="scratchpad-minimize-btn" class="modal-minimize-btn" title="Close" aria-label="Close scratchpad">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="3.4" stroke-linecap="round" aria-hidden="true">
+          <line x1="6" y1="18" x2="18" y2="18"/>
         </svg>
-        Scratchpad
-      </span>
-      <button id="scratchpad-close-btn" class="notes-close-btn" title="Close">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/>
-          <line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
 
-    <div id="scratchpad-input-area" style="padding:10px 12px 6px;">
+    <div style="padding:10px 14px 6px;">
       <textarea id="scratchpad-textarea"
-        placeholder="Type anything — a note, idea, task, event, grocery list, or project idea…"
-        rows="4"
-        style="width:100%;box-sizing:border-box;resize:vertical;font-size:0.9em;
+        placeholder="Type anything — a note, idea, task, event, grocery list, or project idea… (Ctrl+Enter to send)"
+        rows="3"
+        style="width:100%;box-sizing:border-box;resize:vertical;font-size:0.88em;
                background:var(--input-bg,rgba(255,255,255,0.05));
                border:1px solid rgba(255,255,255,0.1);border-radius:6px;
-               color:inherit;padding:8px 10px;outline:none;"></textarea>
+               color:inherit;padding:8px 10px;outline:none;font-family:inherit;"></textarea>
       <div style="display:flex;justify-content:flex-end;margin-top:6px;">
         <button id="scratchpad-submit-btn" class="memory-toolbar-btn">Submit</button>
       </div>
     </div>
 
-    <div id="scratchpad-entries-list" style="overflow-y:auto;flex:1;padding:4px 0 12px;"></div>
+    <div id="scratchpad-entries-list" style="overflow-y:auto;max-height:320px;padding:4px 0 8px;"></div>
   `;
-  document.body.appendChild(pane);
 
-  document.getElementById('scratchpad-close-btn').addEventListener('click', closePanel);
+  // Backdrop — same pattern as Notes, centres the pane
+  const backdrop = document.createElement('div');
+  backdrop.className = 'notes-pane-backdrop';
+  backdrop.id = 'scratchpad-pane-backdrop';
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) closePanel(); });
+  backdrop.appendChild(pane);
+  document.body.appendChild(backdrop);
+
+  document.getElementById('scratchpad-minimize-btn').addEventListener('click', closePanel);
   document.getElementById('scratchpad-submit-btn').addEventListener('click', _onSubmit);
   document.getElementById('scratchpad-textarea').addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
