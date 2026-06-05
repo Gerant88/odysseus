@@ -136,7 +136,11 @@ async def _run_pipeline(entry_id: str, text: str, owner: str, session_manager, t
                           error_msg="No model configured. Set a Default model in Settings.")
             return
 
+        from datetime import datetime as _dt_now
+        _today = _dt_now.now().strftime("%Y-%m-%d %H:%M")
+
         triage_system = (
+            f"Today is {_today}.\n\n"
             "You are a triage assistant. Given free-form text, determine what kind of "
             "thing it is and extract structured data.\n\n"
             "Respond ONLY with a JSON object — no preamble, no markdown fences.\n\n"
@@ -145,7 +149,7 @@ async def _run_pipeline(entry_id: str, text: str, owner: str, session_manager, t
             ' "title": "<60 chars — short descriptive title>",\n'
             ' "summary": "<one sentence>",\n'
             ' "extracted": {\n'
-            '   "due": "<ISO-8601 datetime or null>",\n'
+            '   "due": "<ISO-8601 datetime or null — use the current year unless user specifies otherwise>",\n'
             '   "items": ["list", "of", "items"] or null,\n'
             '   "description": "<fuller text or null>"\n'
             " }}\n\n"
@@ -227,18 +231,6 @@ async def _run_pipeline(entry_id: str, text: str, owner: str, session_manager, t
             args = {"action": "create_event", "summary": title,
                     "description": description}
             if due:
-                # If the triage returned a past date (year not specified by user,
-                # LLM defaulted to the current or previous year), bump to next year.
-                try:
-                    from datetime import datetime as _dt, timezone as _tz
-                    _parsed = _dt.fromisoformat(due.replace("Z", "+00:00"))
-                    _now = _dt.now(_tz.utc) if _parsed.tzinfo else _dt.utcnow()
-                    if _parsed.replace(tzinfo=None) < _now.replace(tzinfo=None):
-                        _bumped = _parsed.replace(year=_parsed.year + 1)
-                        due = _bumped.isoformat()
-                        logger.info(f"scratchpad: bumped past date {_parsed.date()} → {_bumped.date()}")
-                except Exception:
-                    pass  # leave due as-is if parsing fails
                 args["dtstart"] = due
             try:
                 result = await do_manage_calendar(json.dumps(args), owner=owner)
