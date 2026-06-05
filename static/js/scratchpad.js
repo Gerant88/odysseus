@@ -87,14 +87,15 @@ function _buildPanel() {
 
     <div style="padding:10px 14px 6px;">
       <textarea id="scratchpad-textarea"
-        placeholder="Type anything — a note, idea, task, event, grocery list, or project idea… (Ctrl+Enter to send)"
+        placeholder="Type anything — a note, idea, task, event, grocery list, or project idea…"
         rows="3"
         style="width:100%;box-sizing:border-box;resize:vertical;font-size:0.88em;
                background:var(--input-bg,rgba(255,255,255,0.05));
                border:1px solid rgba(255,255,255,0.1);border-radius:6px;
                color:inherit;padding:8px 10px;outline:none;font-family:inherit;"></textarea>
-      <div style="display:flex;justify-content:center;margin-top:8px;">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:4px;margin-top:8px;">
         <button id="scratchpad-submit-btn" class="memory-toolbar-btn" style="padding:5px 24px;">Submit</button>
+        <span style="font-size:0.72em;opacity:0.4;">Ctrl+Enter to send</span>
       </div>
     </div>
 
