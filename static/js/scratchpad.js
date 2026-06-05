@@ -339,7 +339,12 @@ function _attachSpinners() {
   if (!list) return;
   list.querySelectorAll('[data-spinner-id]').forEach(slot => {
     const id = slot.dataset.spinnerId;
-    if (_activeSpinners.has(id)) return; // already attached
+    // Re-render replaces the DOM node — check if the slot is actually empty
+    // (i.e. the old spinner element was destroyed) and reattach if so.
+    const alreadyAttached = _activeSpinners.has(id) && slot.children.length > 0;
+    if (alreadyAttached) return;
+    // Stop the old instance if one exists (its element was detached by re-render)
+    if (_activeSpinners.has(id)) _activeSpinners.get(id).stop?.();
     const label = slot.dataset.spinnerLabel || 'Triaging';
     const sp = spinnerModule.create(label, 'right', 'wave');
     const el = sp.createElement();
@@ -387,7 +392,10 @@ function _cardHTML(e) {
   } else if (e.status === 'approved') {
     statusEl = `<span style="opacity:0.5;font-size:0.8em;">✓ Approved — agent running</span>`;
   } else if (e.status === 'error') {
-    statusEl = `<span style="color:#e05c5c;font-size:0.8em;" title="${e.error_msg || ''}">⚠ Error</span>`;
+    const errTip = e.error_msg || 'Something went wrong';
+    statusEl = `<span style="color:#e05c5c;font-size:0.8em;" title="${_esc(errTip)}">
+      ⚠ Could not identify — <span style="opacity:0.7;text-decoration:underline;cursor:default;">${_esc(errTip.length > 60 ? errTip.slice(0,60)+'…' : errTip)}</span>
+    </span>`;
   } else {
     statusEl = `<span style="opacity:0.4;font-size:0.8em;">${e.status}</span>`;
   }
