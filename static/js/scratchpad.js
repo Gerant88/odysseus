@@ -284,9 +284,6 @@ function _renderEntries() {
     btn.addEventListener('click', () => _deleteEntry(btn.dataset.deleteId));
   });
   // Bind proposal actions
-  list.querySelectorAll('[data-approve-id]').forEach(btn => {
-    btn.addEventListener('click', () => _approveEntry(btn.dataset.approveId));
-  });
   list.querySelectorAll('[data-openchat-id]').forEach(btn => {
     btn.addEventListener('click', () => _openChat(btn.dataset.openchatId));
   });
@@ -404,18 +401,13 @@ function _cardHTML(e) {
     <div style="margin-top:8px;padding:10px;background:rgba(224,92,92,0.08);
                 border:1px solid rgba(224,92,92,0.25);border-radius:6px;">
       <div style="font-size:0.82em;opacity:0.8;margin-bottom:8px;">
-        📄 Proposal generated — review and choose an action:
+        📄 Proposal ready — includes market research, competitors &amp; recommendation
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button data-approve-id="${e.id}"
-          class="memory-toolbar-btn"
-          style="font-size:0.82em;padding:4px 10px;">
-          ✓ Approve &amp; Execute
-        </button>
         <button data-openchat-id="${e.id}"
           class="memory-toolbar-btn"
-          style="font-size:0.82em;padding:4px 10px;opacity:0.8;">
-          💬 Open Chat
+          style="font-size:0.82em;padding:4px 10px;">
+          📄 View Proposal
         </button>
       </div>
     </div>` : '';
@@ -492,22 +484,23 @@ async function _openChat(id) {
   const btn = document.querySelector(`[data-openchat-id="${id}"]`);
   if (btn) { btn.disabled = true; btn.textContent = 'Opening…'; }
   try {
-    const r = await fetch(`${API}/api/scratchpad/${id}/open-chat`, {
-      method: 'POST', credentials: 'same-origin',
-    });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
+    // Get the proposal_doc_id from the entry
+    const r = await fetch(`${API}/api/scratchpad/${id}`, { credentials: 'same-origin' });
+    const entry = await r.json();
+    if (!r.ok) throw new Error(entry.detail || `HTTP ${r.status}`);
+    const docId = entry.proposal_doc_id;
+    if (!docId) throw new Error('No proposal document found for this entry.');
+
     closePanel();
-    // Navigate to the new session — use the global loadSession if available
-    if (window.loadSession) {
-      window.loadSession(d.session_id);
+    // Open in the Odysseus document editor
+    if (window.documentModule?.loadDocument) {
+      window.documentModule.loadDocument(docId);
     } else {
-      // Fallback: reload with session hash
-      window.location.hash = d.session_id;
-      window.location.reload();
+      // Fallback: navigate to library
+      window.location.hash = `doc-${docId}`;
     }
   } catch (e) {
-    if (window.uiModule?.showError) window.uiModule.showError('Open Chat failed: ' + e.message);
-    if (btn) { btn.disabled = false; btn.textContent = '💬 Open Chat'; }
+    if (window.uiModule?.showError) window.uiModule.showError('Could not open proposal: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = '📄 View Proposal'; }
   }
 }
