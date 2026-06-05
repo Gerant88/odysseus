@@ -13,6 +13,7 @@
 
 | Feature | Description |
 |---|---|
+| **Scratchpad** | Quick-entry panel (pencil icon, below New Chat) — type anything, AI triages and routes it to Notes, Tasks, Calendar, or a proposal document. Project entries generate a full Market Research + Competitors + Honest Recommendation doc saved to Library. |
 | **Caveman Mode** | Chat toolbar toggle (boulder icon) that compresses AI responses ~65–75% fewer tokens. Inspired by [JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman). |
 | **GitHub Skill Import** | Paste a GitHub repo URL in Brain → Add Skill to import skills automatically. Supports `SKILL.md` files, bulk `skills/` directory discovery, and LLM-synthesised skills from README. |
 
