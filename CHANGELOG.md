@@ -14,6 +14,17 @@ All notable changes to this fork of [Odysseus](https://github.com/pewdiepie-arch
 - Follows the same toggle pattern as Web Search and Shell Access (per-mode persistence, toast notification, first-use splash card)
 - Full documentation in [`docs/caveman-mode.md`](docs/caveman-mode.md)
 
+#### Scratchpad
+- New **Scratchpad** panel under Tools — type anything, AI triages and routes it to the right artifact
+- Categories: note, idea, reminder, task, event, grocery list, project/feature/build
+- Simple entries (note/task/event/grocery) are created immediately in the background
+- Project entries generate a full proposal document (Summary, Architecture, Implementation Plan, Open Questions, Estimated Effort)
+- Proposal cards show **Approve & Execute** (spawns a PM agent) and **Open Chat** (opens a new session with proposal as context)
+- Notification dot on sidebar badge when a proposal is waiting for review
+- Toggleable in Settings > Appearance
+- Full backend: `POST/GET /api/scratchpad`, `/approve`, `/open-chat`, `/delete`
+- Pipeline is async — panel polls at 2s intervals for status updates
+
 #### GitHub Skill Import
 - New "Import from GitHub" input in Brain → Add → Add Skill panel
 - Paste any GitHub repo URL to import skills automatically — no manual copy-paste needed
