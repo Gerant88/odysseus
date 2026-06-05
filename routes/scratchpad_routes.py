@@ -227,9 +227,23 @@ async def _run_pipeline(entry_id: str, text: str, owner: str, session_manager, t
             args = {"action": "create_event", "summary": title,
                     "description": description}
             if due:
+                # If the triage returned a past date (year not specified by user,
+                # LLM defaulted to the current or previous year), bump to next year.
+                try:
+                    from datetime import datetime as _dt, timezone as _tz
+                    _parsed = _dt.fromisoformat(due.replace("Z", "+00:00"))
+                    _now = _dt.now(_tz.utc) if _parsed.tzinfo else _dt.utcnow()
+                    if _parsed.replace(tzinfo=None) < _now.replace(tzinfo=None):
+                        _bumped = _parsed.replace(year=_parsed.year + 1)
+                        due = _bumped.isoformat()
+                        logger.info(f"scratchpad: bumped past date {_parsed.date()} → {_bumped.date()}")
+                except Exception:
+                    pass  # leave due as-is if parsing fails
                 args["dtstart"] = due
             try:
                 result = await do_manage_calendar(json.dumps(args), owner=owner)
+                if result and result.get("exit_code", 0) != 0:
+                    logger.warning(f"scratchpad: do_manage_calendar returned error: {result.get('error')}")
                 ev_id = (result or {}).get("event_id") or (result or {}).get("id")
                 artifact_type, artifact_id = "event", ev_id
             except Exception as e:
