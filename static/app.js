@@ -24,6 +24,7 @@ import galleryModule from './js/gallery.js';
 import tasksModule from './js/tasks.js';
 import calendarModule from './js/calendar.js';
 import notesModule from './js/notes.js';
+import * as scratchpadModule from './js/scratchpad.js';
 import adminModule from './js/admin.js';
 import settingsModule from './js/settings.js';
 // Eagerly bind unified minimize/restore behavior across all tool modals.
@@ -919,6 +920,15 @@ function initializeEventListeners() {
   if (notesModule && notesModule.refreshDueBadge) {
     notesModule.refreshDueBadge();
     setInterval(() => notesModule.refreshDueBadge(), 5 * 60 * 1000);
+  }
+
+  // Scratchpad
+  window._scratchpadModule = scratchpadModule;
+  const toolScratchpadBtn = el('tool-scratchpad-btn');
+  if (toolScratchpadBtn) {
+    toolScratchpadBtn.addEventListener('click', () => {
+      if (scratchpadModule) scratchpadModule.togglePanel();
+    });
   }
 
   // URL-based panel routing — bookmark /calendar, /notes, /cookbook etc
@@ -2399,6 +2409,7 @@ function initializeEventListeners() {
     'tool-memory':         '#tool-memory-btn',
     'tool-notes':          '#tool-notes-btn',
     'tool-tasks':          '#tool-tasks-btn',
+    'tool-scratchpad':     '#tool-scratchpad-btn',
     'tool-theme':          '#tool-theme-btn',
     'user-bar':            '#user-bar-profile',
     'sidebar-settings-btn':'#user-bar-settings',

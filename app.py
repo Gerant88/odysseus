@@ -630,6 +630,10 @@ app.include_router(setup_task_routes(task_scheduler))
 from routes.assistant_routes import setup_assistant_routes
 app.include_router(setup_assistant_routes(task_scheduler))
 
+# Scratchpad — intelligent free-form inbox with AI triage
+from routes.scratchpad_routes import setup_scratchpad_routes
+app.include_router(setup_scratchpad_routes(session_manager, task_scheduler))
+
 # Calendar (CalDAV)
 from routes.calendar_routes import setup_calendar_routes
 calendar_router = setup_calendar_routes()

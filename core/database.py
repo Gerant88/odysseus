@@ -520,6 +520,26 @@ class CrewMember(TimestampMixin, Base):
                            backref=backref("crew_member", uselist=False))
 
 
+class ScratchpadEntry(TimestampMixin, Base):
+    """An entry submitted to the Scratchpad — triaged and routed to the right artifact."""
+    __tablename__ = "scratchpad_entries"
+
+    id                 = Column(String, primary_key=True, index=True)
+    owner              = Column(String, nullable=True, index=True)
+    raw_text           = Column(Text, nullable=False)
+    # Triage result
+    category           = Column(String, nullable=True)   # note|idea|reminder|task|event|grocery_list|project
+    triage_json        = Column(Text, nullable=True)     # full JSON string from LLM
+    status             = Column(String, default="pending")  # pending|triaging|creating|done|error|awaiting_approval|approved
+    error_msg          = Column(Text, nullable=True)
+    # Links to created artifacts
+    artifact_type      = Column(String, nullable=True)   # note|task|event|document
+    artifact_id        = Column(String, nullable=True)
+    # Project path only
+    proposal_doc_id    = Column(String, ForeignKey("documents.id", ondelete="SET NULL"), nullable=True)
+    spinoff_session_id = Column(String, nullable=True)
+
+
 class ScheduledTask(TimestampMixin, Base):
     """A recurring or one-off task — LLM-powered or direct action, time or event triggered."""
     __tablename__ = "scheduled_tasks"
@@ -1601,6 +1621,7 @@ def init_db():
     _migrate_encrypt_email_passwords()
     _migrate_encrypt_signatures()
     _migrate_encrypt_endpoint_keys()
+    _migrate_add_scratchpad_table()
 
 
 def _migrate_add_email_smtp_security():
@@ -1926,6 +1947,40 @@ def archive_session(session_id: str):
             db.commit()
             return True
     return False
+
+def _migrate_add_scratchpad_table():
+    """Create scratchpad_entries table if it doesn't exist (safe on existing DBs)."""
+    import sqlite3
+    db_path = DATABASE_URL.replace("sqlite:///", "")
+    if not os.path.exists(db_path):
+        return
+    try:
+        conn = sqlite3.connect(db_path)
+        existing = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+        if "scratchpad_entries" not in existing:
+            conn.execute("""
+                CREATE TABLE scratchpad_entries (
+                    id TEXT PRIMARY KEY,
+                    owner TEXT,
+                    raw_text TEXT NOT NULL,
+                    category TEXT,
+                    triage_json TEXT,
+                    status TEXT DEFAULT 'pending',
+                    error_msg TEXT,
+                    artifact_type TEXT,
+                    artifact_id TEXT,
+                    proposal_doc_id TEXT REFERENCES documents(id) ON DELETE SET NULL,
+                    spinoff_session_id TEXT,
+                    created_at DATETIME,
+                    updated_at DATETIME
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS ix_scratchpad_owner ON scratchpad_entries(owner)")
+            conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.warning(f"scratchpad migration failed: {e}")
+
 
 # Initialize the database by creating all tables
 

@@ -2674,6 +2674,13 @@ async function _pollTaskNotifications() {
       if (ok) uiModule.showToast(msg, { duration: 5000 });
       else uiModule.showError(msg);
     }
+    // Update scratchpad notif dot if module is loaded
+    try {
+      const dot = document.getElementById('scratchpad-notif-dot');
+      if (dot && window._scratchpadModule) {
+        dot.style.display = window._scratchpadModule.hasPendingProposals() ? '' : 'none';
+      }
+    } catch (_) {}
   } catch (e) {
     // Silently ignore — server may be unreachable
   }
